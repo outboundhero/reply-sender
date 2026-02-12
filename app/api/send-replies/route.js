@@ -109,4 +109,10 @@ export async function GET() {
 
   return Response.json({
     chunkIndex,
-    totalChunks:
+    totalChunks: chunkFiles.length,
+    posInChunk: pos,
+    totalSent: sent,
+    failed: failed.length,
+    done: chunkIndex >= chunkFiles.length && failed.length === 0,
+  });
+}
