@@ -40,7 +40,6 @@ export async function POST() {
   const failed = (await kv.get('failed')) || [];
   const chunkFiles = getChunkFiles();
 
-  // All chunks done — retry failed
   if (chunkIndex >= chunkFiles.length) {
     if (failed.length === 0) {
       return Response.json({ done: true, sent });
@@ -61,7 +60,6 @@ export async function POST() {
     return Response.json({ retrying: true, remaining: remaining.length });
   }
 
-  // Load current chunk
   const chunk = loadChunk(chunkFiles[chunkIndex]);
   const batch = chunk.slice(pos, pos + BATCH_SIZE);
   const newFailed = [];
@@ -76,7 +74,6 @@ export async function POST() {
   const newPos = pos + batch.length;
   const newSent = sent + batch.length;
 
-  // Move to next chunk if current one is done
   if (newPos >= chunk.length) {
     await kv.set('chunkIndex', chunkIndex + 1);
     await kv.set('pos', 0);
@@ -112,10 +109,4 @@ export async function GET() {
 
   return Response.json({
     chunkIndex,
-    totalChunks: chunkFiles.length,
-    posInChunk: pos,
-    totalSent: sent,
-    failed: failed.length,
-    done: chunkIndex >= chunkFiles.length && failed.length === 0,
-  });
-}
+    totalChunks:
