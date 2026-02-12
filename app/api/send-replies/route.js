@@ -1,9 +1,11 @@
 import { kv } from '@vercel/kv';
+import fs from 'fs';
+import path from 'path';
 
 const WEBHOOK_URL = 'https://n8n.outboundhero.co/webhook/untracked';
 const BATCH_SIZE = 25;
 const DELAY_MS = 10000;
-const CHUNK_SIZE = 2000; // must match split.js
+const CHUNK_SIZE = 2000;
 
 export const maxDuration = 300;
 
@@ -22,33 +24,30 @@ async function send(reply) {
   }
 }
 
-async function loadReplies(offset) {
-  const chunkIndex = Math.floor(offset / CHUNK_SIZE);
+function loadChunk(chunkIndex) {
   const padded = String(chunkIndex).padStart(3, '0');
-  const chunk = (await import(`@/data/chunks/chunk_${padded}.json`)).default;
-  const startInChunk = offset % CHUNK_SIZE;
-  return { replies: chunk.slice(startInChunk, startInChunk + BATCH_SIZE), chunkTotal: chunk.length };
+  const filePath = path.join(process.cwd(), 'data', 'chunks', `chunk_${padded}.json`);
+  const raw = fs.readFileSync(filePath, 'utf8');
+  return JSON.parse(raw);
+}
+
+function getTotalFromDisk() {
+  const chunksDir = path.join(process.cwd(), 'data', 'chunks');
+  const files = fs.readdirSync(chunksDir).filter(f => f.endsWith('.json')).sort();
+  let total = 0;
+  for (const file of files) {
+    const raw = fs.readFileSync(path.join(chunksDir, file), 'utf8');
+    total += JSON.parse(raw).length;
+  }
+  return total;
 }
 
 async function getTotalReplies() {
   let total = await kv.get('total');
   if (total) return total;
-
-  // Count once by checking all chunks
-  let count = 0;
-  let i = 0;
-  while (true) {
-    try {
-      const padded = String(i).padStart(3, '0');
-      const chunk = (await import(`@/data/chunks/chunk_${padded}.json`)).default;
-      count += chunk.length;
-      i++;
-    } catch {
-      break;
-    }
-  }
-  await kv.set('total', count);
-  return count;
+  total = getTotalFromDisk();
+  await kv.set('total', total);
+  return total;
 }
 
 export async function POST() {
@@ -56,7 +55,6 @@ export async function POST() {
   const failed = (await kv.get('failed')) || [];
   const total = await getTotalReplies();
 
-  // All done — retry failed ones
   if (offset >= total) {
     if (failed.length === 0) {
       return Response.json({ done: true, total });
@@ -77,18 +75,20 @@ export async function POST() {
     return Response.json({ retrying: true, remaining: remaining.length });
   }
 
-  // Load only the chunk we need
-  const { replies } = await loadReplies(offset);
+  const chunkIndex = Math.floor(offset / CHUNK_SIZE);
+  const startInChunk = offset % CHUNK_SIZE;
+  const chunk = loadChunk(chunkIndex);
+  const batch = chunk.slice(startInChunk, startInChunk + BATCH_SIZE);
   const newFailed = [];
 
-  for (let i = 0; i < replies.length; i++) {
-    const ok = await send(replies[i]);
-    if (!ok) newFailed.push(replies[i]);
+  for (let i = 0; i < batch.length; i++) {
+    const ok = await send(batch[i]);
+    if (!ok) newFailed.push(batch[i]);
     console.log(`${ok ? '✅' : '❌'} [${offset + i + 1}/${total}]`);
-    if (i < replies.length - 1) await sleep(DELAY_MS);
+    if (i < batch.length - 1) await sleep(DELAY_MS);
   }
 
-  const newOffset = offset + replies.length;
+  const newOffset = offset + batch.length;
   await kv.set('offset', newOffset);
   if (newFailed.length) await kv.set('failed', [...failed, ...newFailed]);
 
