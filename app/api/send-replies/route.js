@@ -2,7 +2,7 @@ import { kv } from '@vercel/kv';
 import fs from 'fs';
 import path from 'path';
 
-const WEBHOOK_URL = 'https://replies-custom-code-project.vercel.app/api/webhook/tracked';
+const WEBHOOK_URL = 'https://n8n.outboundhero.co/webhook/untracked';
 const BATCH_SIZE = 25;
 const DELAY_MS = 10000;
 
