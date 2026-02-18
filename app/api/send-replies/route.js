@@ -2,7 +2,7 @@ import { kv } from '@vercel/kv';
 import fs from 'fs';
 import path from 'path';
 
-const WEBHOOK_URL = 'https://n8n.outboundhero.co/webhook/untracked';
+const WEBHOOK_URL = 'https://n8n.outboundhero.co/webhook/06daae20-16ec-412f-a98a-2834e33cdcde';
 const BATCH_SIZE = 25;
 const DELAY_MS = 10000;
 
